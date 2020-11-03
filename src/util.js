@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 
 export function calcOptionsLength (options) {
   options = options || [];
@@ -81,3 +81,5 @@ export function createGetHeight ({
     }
   };
 }
+
+export const sum = (a, b) => a + b;

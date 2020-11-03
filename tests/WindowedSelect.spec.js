@@ -1,5 +1,4 @@
 import Select, { components } from 'react-select';
-import 'jest-dom/extend-expect'; //todo remove?
 import { mount, shallow } from 'enzyme';
 import React from 'react';
 import WindowedMenuList from '../src/MenuList';
@@ -69,5 +68,24 @@ describe('WindowedSelect', () => {
     );
     expect(selectWrapper.find(MenuList).exists()).toBeTruthy();
     expect(selectWrapper.find(WindowedMenuList).exists()).toBeFalsy();
+  });
+
+  test('forwards ref', () => {
+    let windowedSelectRef;
+    let selectRef;
+
+    mount(
+      <WindowedSelect
+        windowThreshold={0}
+        ref={x => windowedSelectRef = x}
+      />
+    );
+
+    mount(<Select ref={x => selectRef = x}/>);
+
+    expect(selectRef.state).toEqual(windowedSelectRef.state);
+    expect(selectRef.context).toEqual(windowedSelectRef.context);
+    expect(selectRef.refs).toEqual(windowedSelectRef.refs);
+    expect(selectRef.updater).toEqual(windowedSelectRef.updater);
   })
 });

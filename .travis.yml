@@ -2,7 +2,7 @@ sudo: false
 
 language: node_js
 node_js:
-  - 8
+  - 12.13.0
 
 before_install:
   - npm install coveralls
@@ -13,3 +13,7 @@ after_success:
 branches:
   only:
     - master
+
+script:
+  - npm run test:cov
+  - npm run cy:ci

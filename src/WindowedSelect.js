@@ -1,22 +1,20 @@
 import MenuList from './MenuList';
-import React from 'react';
+import React, { useMemo } from 'react';
 import Select from 'react-select';
 import { calcOptionsLength } from './util';
-import { useMemo } from 'react';
 
-function WindowedSelect (props, ref) {
-  const { windowThreshold = 100 } = props;
+function WindowedSelect ({ windowThreshold = 100, ...passedProps }, ref) {
   const optionsLength = useMemo(
-    () => calcOptionsLength(props.options),
-    [props.options]
+    () => calcOptionsLength(passedProps.options),
+    [passedProps.options]
   );
   const isWindowed = optionsLength >= windowThreshold;
 
   return (
     <Select
-      {...props}
+      {...passedProps}
       components={{
-        ...props.components,
+        ...passedProps.components,
         ...(
           isWindowed
             ? { MenuList }

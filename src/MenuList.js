@@ -2,31 +2,16 @@ import {
   createGetHeight,
   flattenGroupedChildren,
   getCurrentIndex,
+  sum,
 } from './util';
-import PropTypes from 'prop-types';
-import React, { forwardRef } from 'react';
+
+import React, { forwardRef, useRef, useMemo, useEffect, useLayoutEffect, useState } from 'react';
 import { VariableSizeList as List } from 'react-window';
 
-class MenuList extends React.PureComponent {
-  constructor (props) {
-    super(props);
-
-    this.setListRef = this.setListRef.bind(this);
-    this.getItemSize = this.getItemSize.bind(this);
-
-    this.state = {
-      currentIndex: 0,
-      children: null,
-      heights: [],
-      itemCount: 0,
-      menuHeight: 0,
-    };
-  }
-
-  static getDerivedStateFromProps (nextProps, prevState) {
-    if (nextProps.children !== prevState.children) {
-      const { getStyles } = nextProps;
-      let children = React.Children.toArray(nextProps.children);
+function MenuList (props) {
+  const children = useMemo(
+    () => {
+      const children = React.Children.toArray(props.children);
 
       const head = children[0] || {};
       const {
@@ -40,129 +25,150 @@ class MenuList extends React.PureComponent {
       const isGrouped = groupedChildrenLength > 0;
       const flattenedChildren = isGrouped && flattenGroupedChildren(children);
 
-      children = isGrouped
+      return isGrouped
         ? flattenedChildren
         : children;
+    },
+    [props.children]
+  );
 
-      const groupHeadingStyles = getStyles('groupHeading', nextProps);
-      const loadingMsgStyles = getStyles('loadingMessage', nextProps);
-      const noOptionsMsgStyles = getStyles('noOptionsMessage', nextProps);
-      const optionStyles = getStyles('option', nextProps);
-      const getHeight = createGetHeight({
-        groupHeadingStyles,
-        noOptionsMsgStyles,
-        optionStyles,
-        loadingMsgStyles,
-      });
+  const { getStyles } = props;
+  const groupHeadingStyles = getStyles('groupHeading', props);
+  const loadingMsgStyles = getStyles('loadingMessage', props);
+  const noOptionsMsgStyles = getStyles('noOptionsMessage', props);
+  const optionStyles = getStyles('option', props);
+  const getHeight = createGetHeight({
+    groupHeadingStyles,
+    noOptionsMsgStyles,
+    optionStyles,
+    loadingMsgStyles,
+  });
 
-      const heights = children.map(getHeight);
+  const heights = useMemo(() => children.map(getHeight), [children]);
+  const currentIndex = useMemo(() => getCurrentIndex(children), [children]);
 
-      const currentIndex = getCurrentIndex(children);
+  const itemCount = children.length;
 
-      const itemCount = children.length;
+  // calc menu height
+  const { maxHeight, paddingBottom = 0, paddingTop = 0, ...menuListStyle } = getStyles('menuList', props);
+  const totalHeight = useMemo(() => heights.reduce(sum, 0), [heights]);
+  const totalMenuHeight = totalHeight + paddingBottom + paddingTop;
+  const menuHeight = Math.min(maxHeight, totalMenuHeight);
+  const estimatedItemSize = Math.floor(totalHeight / itemCount);
 
-      // calc menu height
-      const sum = (a, b) => a + b;
-      const { maxHeight, paddingBottom = 0, paddingTop = 0 } = getStyles('menuList', nextProps);
-      const totalHeight = heights.reduce(sum, 0);
-      const totalMenuHeight = totalHeight + paddingBottom + paddingTop;
-      const menuHeight = Math.min(maxHeight, totalMenuHeight);
-      const estimatedItemSize = Math.floor(totalHeight / itemCount);
+  const {
+    innerRef,
+    selectProps,
+  } = props;
 
-      return {
-        children,
-        currentIndex,
-        estimatedItemSize,
-        heights,
-        itemCount,
-        menuHeight,
-      };
+  const { classNamePrefix, isMulti } = selectProps || {};
+  const list = useRef(null);
+
+
+  const [measuredHeights, setMeasuredHeights] = useState({});
+  useEffect(
+    () => {
+      setMeasuredHeights({});
+    },
+    [props.children]
+  );
+
+  // method to pass to inner item to set this items outer height
+  const setMeasuredHeight = ({ index, measuredHeight }) => {
+    if (measuredHeights[index] && measuredHeights[index] === measuredHeight) {
+      return;
     }
 
-    return null;
-  }
+    setMeasuredHeights({
+      ...measuredHeights,
+      [index]: measuredHeight,
+    });
 
-  componentDidUpdate() {
-    const { currentIndex } = this.state;
-
-    if (this.state.children.length === 1) {
-      this.list.resetAfterIndex(0);
+    // this forces the list to rerender items after the item positions resizing
+    if (list.current) {
+      list.current.resetAfterIndex(index);
     }
+  };
 
-    /**
-     * enables scrolling on key down arrow
-     *
-     * note: prevents scrolling on index 0 to avoid
-     * returning to top of menu when it remains open after selecting
-     */
-    if (currentIndex >= 1) {
-      this.list.scrollToItem(currentIndex);
-    }
-  }
+  useEffect(
+    () => {
+      /**
+       * enables scrolling on key down arrow
+       */
+      if (currentIndex >= 0 && list.current !== null) {
+        list.current.scrollToItem(currentIndex);
+      }
+    },
+    [currentIndex, children, list]
+  );
 
-  getItemSize (index) {
-    return this.state.heights[index];
-  }
-
-  setListRef(ref) {
-    this.list = ref;
-  }
-
-  render() {
-    const { getStyles, innerRef, selectProps } = this.props;
-    const { children: stateChildren, estimatedItemSize, menuHeight, itemCount } = this.state;
-
-    const {
-      maxHeight, // must be removed bc state.menuHeight should be the single source of truth
-      paddingTop,
-      paddingBottom,
-      ...menuListStyle
-    } = getStyles('menuList', this.props);
-    const { classNamePrefix, isMulti } = selectProps || {};
-
-    return (
-      <List
-        className={classNamePrefix ? `${classNamePrefix}__menu-list${isMulti ? ` ${classNamePrefix}__menu-list--is-multi`: ''}` : ''}
-        style={menuListStyle}
-        ref={this.setListRef}
-        outerRef={innerRef}
-        estimatedItemSize={estimatedItemSize}
-        innerElementType={forwardRef(({ style, ...rest }, ref) => (
-          <div
-            ref={ref}
-            style={{
-              ...style,
-              height: `${parseFloat(style.height) + paddingBottom + paddingTop}px`
-            }}
-            {...rest}
-          />
-        ))}
-        height={menuHeight}
-        itemCount={itemCount}
-        itemData={stateChildren}
-        itemSize={this.getItemSize}
-      >
-        {({ data, index, style }) => {
-          return (
-            <div
-              style={{
-                ...style,
-                top: `${parseFloat(style.top) + paddingTop}px`
-              }}
-            >
-              {data[index]}
-            </div>
-          );
-        }}
-      </List>
-    );
-  }
+  return (
+    <List
+      className={classNamePrefix ? `${classNamePrefix}__menu-list${isMulti ? ` ${classNamePrefix}__menu-list--is-multi`: ''}` : ''}
+      style={menuListStyle}
+      ref={list}
+      outerRef={innerRef}
+      estimatedItemSize={estimatedItemSize}
+      innerElementType={forwardRef(({ style, ...rest }, ref) => (
+        <div
+          ref={ref}
+          style={{
+            ...style,
+            height: `${ parseFloat(style.height) + paddingBottom + paddingTop }px`
+          }}
+          {...rest}
+        />
+      ))}
+      height={menuHeight}
+      itemCount={itemCount}
+      itemData={children}
+      itemSize={index => measuredHeights[index] || heights[index]}
+    >
+    {({ data, index, style}) => (
+      <div
+        style={{
+          ...style,
+          top: `${parseFloat(style.top) + paddingTop}px`,
+        }}>
+        <MenuItem
+          data={data[index]} 
+          index={index}
+          setMeasuredHeight={setMeasuredHeight}
+          height={heights[index]}
+        />
+      </div>
+    )}
+    </List>
+  );
 }
 
-MenuList.propTypes = {
-  getStyles: PropTypes.func,
-  getValue: PropTypes.func,
-  options: PropTypes.array,
-};
+function MenuItem({
+  data,
+  index,
+  setMeasuredHeight,
+  height,
+}) {
+  const ref = useRef();
 
+  // using useLayoutEffect prevents bounciness of options of re-renders
+  useLayoutEffect(() => {
+    if (ref.current) {
+      const measuredHeight = ref.current.getBoundingClientRect().height;
+
+      // only set menu item height when needed, else MenuList is rerendered for each windowed menu item
+      if (measuredHeight > height) {
+        setMeasuredHeight({ index, measuredHeight });
+      }
+    }
+  }, [ref.current]);
+
+  return (
+    <div
+      key={`option-${index}`}
+      ref={ref}
+    >
+      {data}
+    </div>
+  );
+}
 export default MenuList;
